@@ -34,7 +34,7 @@ int html_node_get_type(lua_State * L);
 int html_node_get_first_child(lua_State * L);
 int html_node_get_next_sibling(lua_State * L);
 int html_node_get_parent(lua_State * L);
-int html_node_traverse_children(lua_State * L);
+/*int html_node_traverse_children(lua_State * L);*/
 
 int luaopen_html(lua_State * L);
 
@@ -65,7 +65,6 @@ static const luaL_Reg html_node_methods[] = {
   "firstChild", html_node_get_first_child,
   "nextSibling", html_node_get_next_sibling,
   "parent", html_node_get_parent,
-  "traverse", html_node_traverse_children,
   NULL, NULL,
 };
 
@@ -202,14 +201,6 @@ int html_node_get_parent(lua_State * L) {
   
   lua_pushnil(L);
   return 1;
-}
-
-/* 
- * Element:traverse(function)
- */
-int html_node_traverse_children(lua_State * L) {
-  
-  return 0;
 }
 
 int html_node_deep_copy_from_node(lua_State * L)
