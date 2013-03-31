@@ -9,10 +9,11 @@
 #include <libxml/HTMLParser.h>
 
 #define HTML_DOCUMENT_METATABLE_TYPE "HTML.document"
+#define HTML_ELEMENT_METATABLE_TYPE "HTML.element"
 
-typedef struct _HTML {
+typedef struct _html_document {
   htmlDocPtr doc;
-} HTML, * HTML_ptr;
+} html_document, * html_document_ptr;
 
 
 extern int html_new_document(lua_State * L);
@@ -63,7 +64,7 @@ static xmlAttrPtr get_element_attribute_by_name(xmlNodePtr node, const xmlChar *
  * Document:getElementById(idname)
  */
 int html_get_element_by_id(lua_State * L) {
-  HTML_ptr htmldoc = (HTML_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
+  html_document_ptr htmldoc = (html_document_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
   if (htmldoc && htmldoc->doc) {
     const char * element_id = luaL_checkstring(L, 2);
     if(element_id) {
@@ -143,7 +144,7 @@ int html_new_document(lua_State * L) {
       ctx = NULL;
 
       if(doc) {
-        HTML_ptr htmldoc = (HTML_ptr)lua_newuserdata(L, sizeof(HTML));
+        html_document_ptr htmldoc = (html_document_ptr)lua_newuserdata(L, sizeof(html_document));
         if(htmldoc) {
           htmldoc->doc = doc;
 
@@ -173,7 +174,7 @@ int html_new_document(lua_State * L) {
 }
 
 int html_free(lua_State * L) {
-  HTML_ptr html_ptr = (HTML_ptr)lua_touserdata(L, -1);
+  html_document_ptr html_ptr = (html_document_ptr)lua_touserdata(L, -1);
   if(html_ptr) {
     if(html_ptr->doc) {
       xmlFreeDoc(html_ptr->doc);
