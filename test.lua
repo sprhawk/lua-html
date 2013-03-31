@@ -10,7 +10,10 @@ local doc = html.newdocument(str)
 print(doc)
 print(getmetatable(doc))
 
-doc:getElementById("password");
+elem = doc:getElementById("password");
+
+print(elem)
+print(elem:getAttribute("id"))
 
 --[[
 print(parser)

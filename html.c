@@ -9,18 +9,30 @@
 #include <libxml/HTMLParser.h>
 
 #define HTML_DOCUMENT_METATABLE_TYPE "HTML.document"
-#define HTML_ELEMENT_METATABLE_TYPE "HTML.element"
+#define HTML_NODE_METATABLE_TYPE "HTML.node"
 
 typedef struct _html_document {
   htmlDocPtr doc;
 } html_document, * html_document_ptr;
 
+typedef struct _html_node {
+  htmlNodePtr node;
+  int deep;
+}html_node, * html_node_ptr;
 
 extern int html_new_document(lua_State * L);
 
-int html_free(lua_State * L);
-int html_get_element_by_id(lua_State * L);
-int luaopen_html(lua_State * L) ;
+int html_document_free(lua_State * L);
+int html_node_free(lua_State * L);
+int html_document_get_element_by_id(lua_State * L);
+int html_node_has_attribute(lua_State * L);
+int html_node_get_attribute(lua_State * L);
+int html_node_deep_copy_from_node(lua_State * L);
+int html_node_make_reference_from_node(lua_State * L);
+
+int luaopen_html(lua_State * L);
+
+static html_node_ptr copy_html_node_from_node(lua_State * L, htmlNodePtr node);
 
 void lerror(lua_State * L, const char * msg);
 
@@ -31,11 +43,19 @@ static const luaL_Reg reg[] = {
 
 
 static const luaL_Reg html_document_methods[] = {
-  "__gc", html_free,
-  "getElementById", html_get_element_by_id,
+  "__gc", html_document_free,
+  "getElementById", html_document_get_element_by_id,
   NULL, NULL,
 };
 
+static const luaL_Reg html_node_methods[] = {
+  "__gc", html_node_free,
+  "hasAttribute", html_node_has_attribute,
+  "getAttribute", html_node_get_attribute,
+  "copy", html_node_deep_copy_from_node,
+  "makeRef", html_node_make_reference_from_node,
+  NULL, NULL,
+};
 
 int luaopen_html(lua_State * L) {
 
@@ -51,19 +71,133 @@ void lerror(lua_State * L, const char * msg)
   lua_error(L);
 }
 
-static xmlAttrPtr get_element_attribute_by_name(xmlNodePtr node, const xmlChar * name)
-{
-  xmlAttrPtr attr = NULL;
+static html_node_ptr make_html_node_reference_from_node(lua_State * L, htmlNodePtr node) {
+  html_node_ptr html_node;
   if(node) {
-    attr = xmlHasProp(node, name);
+    html_node = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
+    if(html_node) {
+      html_node->node = node;
+      html_node->deep = 0;
+      int ret = luaL_newmetatable(L, HTML_NODE_METATABLE_TYPE);
+      if(ret) {
+        luaL_setfuncs(L, html_node_methods, 0);
+        lua_pushvalue(L, -1);
+        lua_setfield(L, -2, "__index");
+      }
+      lua_setmetatable(L, -2);
+    }
+    return html_node;
   }
-  return attr;
 }
 
+static html_node_ptr deep_copy_html_node_from_node(lua_State * L, htmlNodePtr node)
+{
+  html_node_ptr html_node = NULL;
+  htmlNodePtr newNode = xmlCopyNode(node, 1);
+  if(newNode) {
+    html_node = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
+    if(html_node) {
+      html_node->node = newNode;
+      html_node->deep = 1;
+      int ret = luaL_newmetatable(L, HTML_NODE_METATABLE_TYPE);
+      if(ret) {
+        luaL_setfuncs(L, html_node_methods, 0);
+        lua_pushvalue(L, -1);
+        lua_setfield(L, -2, "__index");
+      }
+      lua_setmetatable(L, -2);
+    }
+  }
+
+  return html_node;
+}
+
+int html_node_deep_copy_from_node(lua_State * L)
+{
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node) {
+    deep_copy_html_node_from_node(L, html_node->node);
+  }
+  else {
+    lua_pushnil(L);
+    lerror(L, "parameter error");
+  }
+  return 1;
+}
+
+int html_node_make_reference_from_node(lua_State * L)
+{
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node) {
+    make_html_node_reference_from_node(L, html_node->node);
+  }
+  else {
+    lua_pushnil(L);
+    lerror(L, "parameter error");
+  }
+  return 1;
+}
+
+/* 
+ * Element:hasAttribute(attrname)
+ */
+int html_node_has_attribute(lua_State * L)
+{
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, 1, HTML_NODE_METATABLE_TYPE);
+  if(html_node) {
+    const char * attrname = luaL_checkstring(L, 2);
+    if(attrname) {
+      xmlChar * xmlAttrName = xmlCharStrdup(attrname);
+      if(xmlAttrName) {
+        xmlAttrPtr attr = xmlHasProp(html_node->node, xmlAttrName);
+        xmlFree(xmlAttrName);
+        xmlAttrName = NULL;
+        int b = 0;
+        if(attr) {
+          b = 1;
+        }
+        lua_pushboolean(L, b);
+        return 1;
+      }
+      lerror(L, "xmlCharStrdup failed");
+    }
+    lerror(L, "wrong 2nd parameter");
+  }
+  return 0;
+}
+/*
+ * Element:getAttribute(attrname)
+ */
+int html_node_get_attribute(lua_State * L)
+{
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, 1, HTML_NODE_METATABLE_TYPE);
+  if(html_node) {
+    const char * attrname = luaL_checkstring(L, 2);
+    if(attrname) {
+      xmlChar * xmlAttrName = xmlCharStrdup(attrname);
+      if(xmlAttrName) {
+        xmlAttrPtr attr = xmlHasProp(html_node->node, xmlAttrName);
+        free(xmlAttrName);
+        xmlAttrName = NULL;
+        if(attr) {
+          const char * content = (const char *)attr->children->content;
+          lua_pushstring(L, content);
+          return 1;
+        }
+        lua_pushnil(L);
+        return 1;
+      }
+      lerror(L, "xmlCharStrdup() failed");
+    }
+    lerror(L, "wrong 2nd parameter(string type)");
+  }
+  lerror(L, "wrong userdata:html_node");
+  return 1;
+}
 /*
  * Document:getElementById(idname)
  */
-int html_get_element_by_id(lua_State * L) {
+int html_document_get_element_by_id(lua_State * L) {
   html_document_ptr htmldoc = (html_document_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
   if (htmldoc && htmldoc->doc) {
     const char * element_id = luaL_checkstring(L, 2);
@@ -76,7 +210,7 @@ int html_get_element_by_id(lua_State * L) {
       while(node) {
         if(XML_ELEMENT_NODE == node->type) {
           /*printf("%s%s", &spaces[sizeof(spaces) - 1 - space],BAD_CAST node->name);*/
-          xmlAttrPtr attr = get_element_attribute_by_name(node, BAD_CAST "id");
+          xmlAttrPtr attr = xmlHasProp(node, BAD_CAST "id");
           if(attr) {
             int len = strlen(element_id);
             xmlChar * eid = xmlCharStrndup(element_id, len);
@@ -84,7 +218,8 @@ int html_get_element_by_id(lua_State * L) {
             /*printf("%s\n", BAD_CAST attr->children->content);*/
             if (0 == cmp) {
               printf("%s%s(id:%s)\n", &spaces[sizeof(spaces) - 1 - space],BAD_CAST node->name, BAD_CAST attr->children->content);
-              
+              html_node_ptr html_node = deep_copy_html_node_from_node(L, node);
+              return 1;
             }
           }
           /*printf("\n");*/
@@ -173,19 +308,24 @@ int html_new_document(lua_State * L) {
   return 1;
 }
 
-int html_free(lua_State * L) {
-  html_document_ptr html_ptr = (html_document_ptr)lua_touserdata(L, -1);
+int html_document_free(lua_State * L) {
+  html_document_ptr html_ptr = (html_document_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
   if(html_ptr) {
     if(html_ptr->doc) {
       xmlFreeDoc(html_ptr->doc);
       html_ptr->doc = NULL;
     }
-    /*
-    if(state->ctx) {
-      htmlFreeParserCtxt(state->ctx);
-      state->ctx = NULL;
+  }
+  return 0;
+}
+
+int html_node_free(lua_State * L) {
+  html_node_ptr node_ptr = (html_node_ptr)luaL_checkudata(L, 1, HTML_NODE_METATABLE_TYPE);
+  if(node_ptr) {
+    if(node_ptr->deep && node_ptr->node) {
+      xmlFreeNode(node_ptr->node);
     }
-    */
+    node_ptr->node = NULL;
   }
   return 0;
 }
