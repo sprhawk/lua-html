@@ -29,6 +29,12 @@ int html_node_has_attribute(lua_State * L);
 int html_node_get_attribute(lua_State * L);
 int html_node_deep_copy_from_node(lua_State * L);
 int html_node_make_reference_from_node(lua_State * L);
+int html_node_get_name(lua_State * L);
+int html_node_get_type(lua_State * L);
+int html_node_get_first_child(lua_State * L);
+int html_node_get_next_sibling(lua_State * L);
+int html_node_get_parent(lua_State * L);
+int html_node_traverse_children(lua_State * L);
 
 int luaopen_html(lua_State * L);
 
@@ -50,10 +56,16 @@ static const luaL_Reg html_document_methods[] = {
 
 static const luaL_Reg html_node_methods[] = {
   "__gc", html_node_free,
-  "hasAttribute", html_node_has_attribute,
-  "getAttribute", html_node_get_attribute,
   "copy", html_node_deep_copy_from_node,
   "makeRef", html_node_make_reference_from_node,
+  "hasAttribute", html_node_has_attribute,
+  "getAttribute", html_node_get_attribute,
+  "name", html_node_get_name,
+  "type", html_node_get_type,
+  "firstChild", html_node_get_first_child,
+  "nextSibling", html_node_get_next_sibling,
+  "parent", html_node_get_parent,
+  "traverse", html_node_traverse_children,
   NULL, NULL,
 };
 
@@ -72,12 +84,12 @@ void lerror(lua_State * L, const char * msg)
 }
 
 static html_node_ptr make_html_node_reference_from_node(lua_State * L, htmlNodePtr node) {
-  html_node_ptr html_node;
+  html_node_ptr htmlnode;
   if(node) {
-    html_node = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
-    if(html_node) {
-      html_node->node = node;
-      html_node->deep = 0;
+    htmlnode = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
+    if(htmlnode) {
+      htmlnode->node = node;
+      htmlnode->deep = 0;
       int ret = luaL_newmetatable(L, HTML_NODE_METATABLE_TYPE);
       if(ret) {
         luaL_setfuncs(L, html_node_methods, 0);
@@ -86,19 +98,19 @@ static html_node_ptr make_html_node_reference_from_node(lua_State * L, htmlNodeP
       }
       lua_setmetatable(L, -2);
     }
-    return html_node;
+    return htmlnode;
   }
 }
 
 static html_node_ptr deep_copy_html_node_from_node(lua_State * L, htmlNodePtr node)
 {
-  html_node_ptr html_node = NULL;
+  html_node_ptr htmlnode = NULL;
   htmlNodePtr newNode = xmlCopyNode(node, 1);
   if(newNode) {
-    html_node = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
-    if(html_node) {
-      html_node->node = newNode;
-      html_node->deep = 1;
+    htmlnode = (html_node_ptr)lua_newuserdata(L, sizeof(html_node));
+    if(htmlnode) {
+      htmlnode->node = newNode;
+      htmlnode->deep = 1;
       int ret = luaL_newmetatable(L, HTML_NODE_METATABLE_TYPE);
       if(ret) {
         luaL_setfuncs(L, html_node_methods, 0);
@@ -109,7 +121,95 @@ static html_node_ptr deep_copy_html_node_from_node(lua_State * L, htmlNodePtr no
     }
   }
 
-  return html_node;
+  return htmlnode;
+}
+
+int html_node_get_name(lua_State * L) {
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node && html_node->node) {
+    xmlNodePtr node = html_node->node;
+    const char * name = (const char *)node->name;
+    if(name) {
+      lua_pushstring(L, name);
+    }
+    else {
+      lua_pushstring(L, "");
+    }
+    return 1;
+  }
+  
+  lua_pushnil(L);
+  return 1;
+
+}
+
+int html_node_get_type(lua_State * L) {
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node && html_node->node) {
+    xmlNodePtr node = html_node->node;
+    unsigned int type = node->type;
+    lua_pushunsigned(L, type);
+    return 1;
+  }
+  
+  lua_pushnil(L);
+  return 1;
+
+}
+
+int html_node_get_first_child(lua_State * L) {
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node && html_node->node) {
+    xmlNodePtr node = html_node->node->children;
+    if(node) {
+      html_node_ptr child = make_html_node_reference_from_node(L, node);
+      if(child) {
+        return 1;
+      }
+    }
+  }
+  
+  lua_pushnil(L);
+  return 1;
+}
+int html_node_get_next_sibling(lua_State * L) {
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node && html_node->node) {
+    xmlNodePtr node = html_node->node->next;
+    if(node) {
+      html_node_ptr next = make_html_node_reference_from_node(L, node);
+      if(next) {
+        return 1;
+      }
+    }
+  }
+  
+  lua_pushnil(L);
+  return 1;
+}
+int html_node_get_parent(lua_State * L) {
+  html_node_ptr html_node = (html_node_ptr)luaL_checkudata(L, -1, HTML_NODE_METATABLE_TYPE);
+  if(html_node && html_node->node) {
+    xmlNodePtr node = html_node->node->parent;
+    if(node) {
+      html_node_ptr parent = make_html_node_reference_from_node(L,node);
+      if(parent) {
+        return 1;
+      }
+      lerror(L, "make_html_node_reference_from_node failed");
+    }
+  }
+  
+  lua_pushnil(L);
+  return 1;
+}
+
+/* 
+ * Element:traverse(function)
+ */
+int html_node_traverse_children(lua_State * L) {
+  
+  return 0;
 }
 
 int html_node_deep_copy_from_node(lua_State * L)
@@ -218,7 +318,8 @@ int html_document_get_element_by_id(lua_State * L) {
             /*printf("%s\n", BAD_CAST attr->children->content);*/
             if (0 == cmp) {
               printf("%s%s(id:%s)\n", &spaces[sizeof(spaces) - 1 - space],BAD_CAST node->name, BAD_CAST attr->children->content);
-              html_node_ptr html_node = deep_copy_html_node_from_node(L, node);
+              /*html_node_ptr html_node = deep_copy_html_node_from_node(L, node);*/
+              html_node_ptr html_node = make_html_node_reference_from_node(L, node);
               return 1;
             }
           }
@@ -326,6 +427,7 @@ int html_node_free(lua_State * L) {
       xmlFreeNode(node_ptr->node);
     }
     node_ptr->node = NULL;
+    node_ptr->deep = 0;
   }
   return 0;
 }
