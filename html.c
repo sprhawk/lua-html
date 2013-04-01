@@ -23,8 +23,10 @@ typedef struct _html_node {
 extern int html_new_document(lua_State * L);
 
 int html_document_free(lua_State * L);
-int html_node_free(lua_State * L);
+int html_document_get_document_tree(lua_State * L);
 int html_document_get_element_by_id(lua_State * L);
+
+int html_node_free(lua_State * L);
 int html_node_has_attribute(lua_State * L);
 int html_node_get_attribute(lua_State * L);
 int html_node_deep_copy_from_node(lua_State * L);
@@ -50,6 +52,7 @@ static const luaL_Reg reg[] = {
 
 static const luaL_Reg html_document_methods[] = {
   "__gc", html_document_free,
+  "getDocTree", html_document_get_document_tree,
   "getElementById", html_document_get_element_by_id,
   NULL, NULL,
 };
@@ -290,10 +293,9 @@ int html_node_get_attribute(lua_State * L)
  */
 int html_document_get_element_by_id(lua_State * L) {
   html_document_ptr htmldoc = (html_document_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
-  if (htmldoc && htmldoc->doc) {
+  if (htmldoc && htmldoc->doc && htmldoc->doc->children) {
     const char * element_id = luaL_checkstring(L, 2);
     if(element_id) {
-      /*printf("doc type:%d\n", htmldocument->doc->type);*/
       xmlNodePtr node = htmldoc->doc->children;
       char spaces[21] = {0};
       memset(spaces, ' ', sizeof(spaces) - 1);
@@ -310,7 +312,7 @@ int html_document_get_element_by_id(lua_State * L) {
             if (0 == cmp) {
               printf("%s%s(id:%s)\n", &spaces[sizeof(spaces) - 1 - space],BAD_CAST node->name, BAD_CAST attr->children->content);
               /*html_node_ptr html_node = deep_copy_html_node_from_node(L, node);*/
-              html_node_ptr html_node = make_html_node_reference_from_node(L, node);
+              html_node_ptr newnode = make_html_node_reference_from_node(L, node);
               return 1;
             }
           }
@@ -345,6 +347,7 @@ int html_document_get_element_by_id(lua_State * L) {
           }
         }
       }
+      lua_pushnil(L);
       return 1;
     }
     else {
@@ -355,6 +358,16 @@ int html_document_get_element_by_id(lua_State * L) {
   return 0;
 }
 
+int html_document_get_document_tree(lua_State * L) {
+  html_document_ptr htmldoc = (html_document_ptr)luaL_checkudata(L, 1, HTML_DOCUMENT_METATABLE_TYPE);
+  if (htmldoc && htmldoc->doc && htmldoc->doc->children) {
+    make_html_node_reference_from_node(L, htmldoc->doc->children);
+  }
+  else {
+    lua_pushnil(L);
+  }
+  return 1;
+}
 /*
  * HTML.new_document(html_str)
  */
